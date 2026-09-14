@@ -7,7 +7,9 @@ import { initDb } from './db/db.js';
 
 import { productRouter } from './modules/products/product.router.js';
 import { orderRouter } from './modules/orders/order.router.js';
+import { groupRouter } from './modules/groups/group.router.js';
 import { errorHandler } from './middlewares/errorHandler.js';
+import { setupWebSocketServer } from './websocket/WebSocketServer.js';
 
 dotenv.config();
 
@@ -37,11 +39,15 @@ app.get('/health', async (_req, res) => {
 
 app.use('/api/products', productRouter);
 app.use('/api/orders', orderRouter);
+app.use('/api/groups', groupRouter);
 
 // Global error handler
 app.use(errorHandler);
 
 const server = http.createServer(app);
+
+// Setup WebSocket server
+setupWebSocketServer(server);
 
 async function startServer() {
   try {
