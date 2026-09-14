@@ -3,9 +3,12 @@ import config from '../mikro-orm.config.js';
 
 let orm: MikroORM | null = null;
 
-export async function initDb(): Promise<MikroORM> {
+export async function initDb(runMigrations: boolean = true): Promise<MikroORM> {
   if (!orm) {
     orm = await MikroORM.init(config);
+    if (runMigrations) {
+      await orm.migrator.up();
+    }
   }
   return orm;
 }

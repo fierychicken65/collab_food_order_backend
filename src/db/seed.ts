@@ -95,27 +95,25 @@ export const initialProducts = [
 ];
 
 export async function seed() {
-  console.log('🌱 Connecting to database and synchronizing schema...');
-  const orm = await initDb();
-  // Drop and recreate all tables cleanly
-  try {
-    await orm.schema.drop({ dropDb: false });
-  } catch (e) {
-    // ignore if tables don't exist yet
-  }
-  await orm.schema.create();
-  console.log('✅ Database schema created successfully.');
+  console.log('🌱 Connecting to database and running migrations...');
+  const orm = await initDb(false);
+  await orm.migrator.up();
+  console.log('✅ Migrations applied successfully.');
 
   const em = orm.em.fork();
 
-  console.log('🌱 Seeding initial products...');
-  for (const item of initialProducts) {
-    const product = new Product(item);
-    em.persist(product);
+  const existingCount = await em.count(Product);
+  if (existingCount === 0) {
+    console.log('🌱 Seeding initial products...');
+    for (const item of initialProducts) {
+      const product = new Product(item);
+      em.persist(product);
+    }
+    await em.flush();
+    console.log(`✅ Seeded ${initialProducts.length} menu items successfully.`);
+  } else {
+    console.log(`ℹ️ Products already seeded (${existingCount} items present in database).`);
   }
-
-  await em.flush();
-  console.log(`✅ Seeded ${initialProducts.length} menu items successfully.`);
 
   await orm.close();
 }
