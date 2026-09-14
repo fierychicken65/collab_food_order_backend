@@ -5,6 +5,10 @@ import dotenv from 'dotenv';
 import http from 'http';
 import { initDb } from './db/db.js';
 
+import { productRouter } from './modules/products/product.router.js';
+import { orderRouter } from './modules/orders/order.router.js';
+import { errorHandler } from './middlewares/errorHandler.js';
+
 dotenv.config();
 
 const app = express();
@@ -13,6 +17,7 @@ const port = parseInt(process.env.PORT || '3000', 10);
 app.use(cors());
 app.use(express.json());
 
+// Routes
 app.get('/health', async (_req, res) => {
   try {
     const orm = await initDb();
@@ -29,6 +34,12 @@ app.get('/health', async (_req, res) => {
     });
   }
 });
+
+app.use('/api/products', productRouter);
+app.use('/api/orders', orderRouter);
+
+// Global error handler
+app.use(errorHandler);
 
 const server = http.createServer(app);
 
