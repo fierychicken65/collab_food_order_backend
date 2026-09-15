@@ -14,11 +14,16 @@ import {
 dotenv.config();
 
 const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
-const isRemoteDb =
-  hasDatabaseUrl &&
-  !process.env.DATABASE_URL?.includes('localhost') &&
-  !process.env.DATABASE_URL?.includes('127.0.0.1');
-const enableSsl = process.env.DB_SSL === 'true' || isRemoteDb;
+const dbUrl = process.env.DATABASE_URL || '';
+
+// Render external URLs, Supabase, Neon require SSL. Render internal (dpg-*) URLs do not use SSL.
+const needsSsl =
+  process.env.DB_SSL === 'true' ||
+  dbUrl.includes('sslmode=require') ||
+  dbUrl.includes('ssl=true') ||
+  dbUrl.includes('.render.com') ||
+  dbUrl.includes('neon.tech') ||
+  dbUrl.includes('supabase.co');
 
 export default defineConfig({
   ...(hasDatabaseUrl
@@ -30,8 +35,8 @@ export default defineConfig({
         password: process.env.DB_PASSWORD || 'postgrespassword',
         dbName: process.env.DB_NAME || 'collab_food_order',
       }),
-  driverOptions: enableSsl
-    ? { connection: { ssl: { rejectUnauthorized: false } } }
+  driverOptions: needsSsl
+    ? { ssl: { rejectUnauthorized: false } }
     : undefined,
   entities: [Product, GroupSession, Participant, CartItem, Order, OrderItem],
   metadataProvider: ReflectMetadataProvider,
