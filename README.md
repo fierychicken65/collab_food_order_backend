@@ -105,11 +105,14 @@ pnpm start
 
 1. **Host-Centric Session Lifecycle & Auto-Close**:
    - The creator of a group session is designated as the **Host**.
-   - If the Host leaves or disconnects from the session, the group session status is automatically transitioned to `CLOSED`. Any reserved cart stock for that session is immediately unlocked and returned to catalog `availableStock` via PostgreSQL pessimistic locks.
+   - If the Host leaves or disconnects from the session, the group session status is automatically transitioned to `CLOSED`. Any reserved cart stock for that session is immediately unlocked and returned to catalog `availableStock` via PostgreSQL pessimistic locks. This has only been configured for the host as of now.
 
 
 2. **No Authentication or Authorization**:
    - We have not implemented Auth for this project. So the user's state while using the app is temporary and will be lost once he closes the app
+
+3. **Multiple Users with the same name can join the same group**:
+   - As we have not implemented Auth for this project, multiple people with the same name can join the same group
 
 
   
