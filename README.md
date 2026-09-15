@@ -1,10 +1,10 @@
-# Collaborative Food Ordering Backend 🚀
+# Collaborative Food Ordering Backend
 
 A robust, high-performance Node.js & TypeScript backend service powering real-time collaborative group food orders, inventory management with PostgreSQL pessimistic concurrency locking, and live state synchronization over WebSockets.
 
 ---
 
-## 🛠️ Tech Stack & Dependencies
+## Tech Stack & Dependencies
 
 - **Runtime & Language**: Node.js (v20+) & TypeScript (ES2022 / NodeNext)
 - **HTTP Framework**: Express
@@ -13,22 +13,22 @@ A robust, high-performance Node.js & TypeScript backend service powering real-ti
 - **Validation**: Zod (strict runtime request schemas)
 - **Testing**: Vitest (unit, integration & concurrent race-condition tests)
 
+---
 
-
-## 🗄️ Database Schema & Entities
+## Database Schema & Entities
 
 The relational database schema is managed via MikroORM entities and tracked using `@mikro-orm/migrations`:
 
-- **`Product`**: Represents food menu items (`id`, `name`, `description`, `price` in cents, `imageUrl`, `category`, `totalStock`, `availableStock`).
-- **`GroupSession`**: Represents a shared group ordering session (`id`, `code` [6-character unique alphanumeric], `hostParticipantId`, `status` [`ACTIVE`, `ORDER_PLACED`, `ABANDONED`], `version`).
-- **`Participant`**: Represents users in a group session (`id`, `displayName`, `isHost`, `isReady`, `isOnline`, `joinedAt`, `lastActiveAt`).
+- **`Product`**: Food menu items (`id`, `name`, `description`, `price` in cents, `imageUrl`, `category`, `totalStock`, `availableStock`).
+- **`GroupSession`**: Shared group ordering sessions (`id`, `code` [6-character unique alphanumeric], `hostParticipantId`, `status` [`ACTIVE`, `ORDER_PLACED`, `ABANDONED`], `version`).
+- **`Participant`**: Users in a group session (`id`, `displayName`, `isHost`, `isReady`, `isOnline`, `joinedAt`, `lastActiveAt`).
 - **`CartItem`**: Collaborative line items in a group cart with explicit user attribution (`id`, `groupSession`, `product`, `participant`, `quantity`).
 - **`Order`**: Finalized order record (`id`, `orderType` [`NORMAL`, `GROUP`], `customerName`, `totalAmount`, `status`, `groupSession`).
 - **`OrderItem`**: Historical line items for orders preserving pricing and user attribution (`productName`, `price`, `quantity`, `addedByName`).
 
 ---
 
-## ⚙️ Prerequisites & Environment Setup
+## Prerequisites & Environment Setup
 
 ### 1. Requirements
 - **Node.js**: v20.x or higher
@@ -44,7 +44,7 @@ cp .env.example .env
 *(On Windows PowerShell: `Copy-Item .env.example .env`)*
 
 ### 3. Start PostgreSQL with Docker
-Run the database container using the provided root `docker-compose.yml`:
+Run the database container using the root `docker-compose.yml`:
 ```bash
 docker compose up -d
 ```
@@ -55,7 +55,7 @@ docker run -d --name collab_food_order_postgres -e POSTGRES_USER=postgres -e POS
 
 ---
 
-## 🚀 Installation, Migrations & Running
+## Installation, Migrations & Running
 
 ```bash
 # 1. Install dependencies
@@ -76,7 +76,7 @@ The WebSocket server runs at `ws://localhost:3000/ws`.
 
 ---
 
-## 📖 REST API Reference
+## REST API Reference
 
 ### Health & Products
 - **`GET /health`**  
@@ -121,11 +121,11 @@ The WebSocket server runs at `ws://localhost:3000/ws`.
 
 ---
 
-## 📡 WebSocket Real-Time Protocol (`/ws`)
+## WebSocket Real-Time Protocol (`/ws`)
 
 Connect to `ws://<host>:3000/ws`. All messages are JSON formatted.
 
-### Inbound Client Messages (`Client ➔ Server`)
+### Inbound Client Messages (Client to Server)
 | Message Type | Required Payload Fields | Description |
 | :--- | :--- | :--- |
 | `JOIN_SESSION` | `sessionId`, `participantId` | Associates socket with session, marks user online, sends full `SESSION_STATE`. |
@@ -137,7 +137,7 @@ Connect to `ws://<host>:3000/ws`. All messages are JSON formatted.
 | `TOGGLE_READY` | `sessionId`, `participantId` | Toggles readiness status ("Ready" vs "Still Browsing"). |
 | `PLACE_ORDER` | `sessionId`, `participantId` | Host places order (enforces `allReady` and non-empty cart). |
 
-### Outbound Broadcast Messages (`Server ➔ Client`)
+### Outbound Broadcast Messages (Server to Client)
 | Event Type | Payload Data | Description |
 | :--- | :--- | :--- |
 | `SESSION_STATE` | `{ session, participants, cartItems, products }` | Complete state snapshot on connection or resync. |
@@ -149,7 +149,7 @@ Connect to `ws://<host>:3000/ws`. All messages are JSON formatted.
 
 ---
 
-## 🧪 Automated Tests
+## Automated Tests
 
 Run the test suite using Vitest:
 ```bash
