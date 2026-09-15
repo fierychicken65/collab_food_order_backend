@@ -112,7 +112,16 @@ export async function seed() {
     await em.flush();
     console.log(`✅ Seeded ${initialProducts.length} menu items successfully.`);
   } else {
-    console.log(`ℹ️ Products already seeded (${existingCount} items present in database).`);
+    console.log(`ℹ️ Products already seeded (${existingCount} items present in database). Resetting stock...`);
+    for (const item of initialProducts) {
+      const p = await em.findOne(Product, { name: item.name });
+      if (p) {
+        p.availableStock = item.availableStock;
+        p.totalStock = item.totalStock;
+      }
+    }
+    await em.flush();
+    console.log('✅ Stock levels refreshed.');
   }
 
   await orm.close();

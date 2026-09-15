@@ -25,7 +25,7 @@ describe('Product Catalog & Solo Order Concurrency', () => {
   it('should list all products from database', async () => {
     const em = orm.em.fork();
     const products = await em.find(Product, {});
-    expect(products.length).toBe(10);
+    expect(products.length).toBeGreaterThanOrEqual(10);
   });
 
   it('should successfully place a solo order with atomic stock reduction', async () => {

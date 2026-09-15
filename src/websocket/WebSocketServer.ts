@@ -3,6 +3,7 @@ import { WebSocketServer as WSServer, WebSocket } from 'ws';
 import { sessionManager } from './SessionManager.js';
 import { WsClientEvents, WsServerEvents, WsMessage } from './events.js';
 import { groupService } from '../services/GroupService.js';
+import { cartService } from '../services/CartService.js';
 
 export function setupWebSocketServer(httpServer: HttpServer): WSServer {
   const wss = new WSServer({
@@ -138,8 +139,115 @@ export function setupWebSocketServer(httpServer: HttpServer): WSServer {
             break;
           }
 
+          case WsClientEvents.CART_ADD: {
+            const currentInfo = sessionManager.getClientInfo(ws);
+            const sessionId = message.sessionId || currentInfo?.sessionId;
+            const participantId = message.participantId || currentInfo?.participantId;
+            const { productId, quantity } = message;
+
+            if (!sessionId || !participantId || !productId) {
+              sessionManager.sendTo(ws, {
+                type: WsServerEvents.ERROR,
+                message: 'Missing sessionId, participantId, or productId',
+              });
+              return;
+            }
+
+            const result = await cartService.addItem(
+              sessionId,
+              participantId,
+              productId,
+              quantity || 1
+            );
+
+            // Broadcast authoritative cart state to all session participants
+            sessionManager.broadcast(sessionId, {
+              type: WsServerEvents.CART_UPDATED,
+              data: {
+                cartItems: result.cartItems,
+                totalCartAmount: result.totalCartAmount,
+                version: result.version,
+              },
+            });
+
+            // Broadcast real-time stock update to all session participants
+            sessionManager.broadcast(sessionId, {
+              type: WsServerEvents.INVENTORY_UPDATED,
+              data: result.inventory,
+            });
+            break;
+          }
+
+          case WsClientEvents.CART_UPDATE: {
+            const currentInfo = sessionManager.getClientInfo(ws);
+            const sessionId = message.sessionId || currentInfo?.sessionId;
+            const participantId = message.participantId || currentInfo?.participantId;
+            const { cartItemId, quantity } = message;
+
+            if (!sessionId || !participantId || !cartItemId || quantity === undefined) {
+              sessionManager.sendTo(ws, {
+                type: WsServerEvents.ERROR,
+                message: 'Missing required fields for CART_UPDATE',
+              });
+              return;
+            }
+
+            const result = await cartService.updateQuantity(
+              sessionId,
+              participantId,
+              cartItemId,
+              quantity
+            );
+
+            sessionManager.broadcast(sessionId, {
+              type: WsServerEvents.CART_UPDATED,
+              data: {
+                cartItems: result.cartItems,
+                totalCartAmount: result.totalCartAmount,
+                version: result.version,
+              },
+            });
+
+            sessionManager.broadcast(sessionId, {
+              type: WsServerEvents.INVENTORY_UPDATED,
+              data: result.inventory,
+            });
+            break;
+          }
+
+          case WsClientEvents.CART_REMOVE: {
+            const currentInfo = sessionManager.getClientInfo(ws);
+            const sessionId = message.sessionId || currentInfo?.sessionId;
+            const participantId = message.participantId || currentInfo?.participantId;
+            const { cartItemId } = message;
+
+            if (!sessionId || !participantId || !cartItemId) {
+              sessionManager.sendTo(ws, {
+                type: WsServerEvents.ERROR,
+                message: 'Missing required fields for CART_REMOVE',
+              });
+              return;
+            }
+
+            const result = await cartService.removeItem(sessionId, participantId, cartItemId);
+
+            sessionManager.broadcast(sessionId, {
+              type: WsServerEvents.CART_UPDATED,
+              data: {
+                cartItems: result.cartItems,
+                totalCartAmount: result.totalCartAmount,
+                version: result.version,
+              },
+            });
+
+            sessionManager.broadcast(sessionId, {
+              type: WsServerEvents.INVENTORY_UPDATED,
+              data: result.inventory,
+            });
+            break;
+          }
+
           default: {
-            // Forward unknown actions or actions to be implemented in Checkpoint 6 (CART_ADD, etc.)
             console.log(`[WS] Unhandled message type: ${message.type}`);
             break;
           }
