@@ -4,169 +4,156 @@ A robust, high-performance Node.js & TypeScript backend service powering real-ti
 
 ---
 
-## Tech Stack & Dependencies
-
-- **Runtime & Language**: Node.js (v20+) & TypeScript (ES2022 / NodeNext)
-- **HTTP Framework**: Express
-- **Real-Time Communication**: `ws` (Native WebSockets with custom room & presence manager)
-- **Database & ORM**: PostgreSQL 16 & MikroORM v7 (`@mikro-orm/postgresql`, `@mikro-orm/migrations`)
-- **Validation**: Zod (strict runtime request schemas)
-- **Testing**: Vitest (unit, integration & concurrent race-condition tests)
+## Explanation Video
 
 ---
 
-## Database Schema & Entities
+## Setup & Run Instructions
 
-The relational database schema is managed via MikroORM entities and tracked using `@mikro-orm/migrations`:
+### 1. Specific Software & Tool Versions Used
+- **Node.js**: `v20.18.0` (or `v20.x` LTS / `v22.x`)
+- **Package Manager**: `pnpm` `v11.8.0` (or `pnpm v9+` / `npm v10+`)
+- **Database**: PostgreSQL `16.0-alpine`
+- **Docker**: Docker Desktop `v24.x+` with Docker Compose `v2.x`
+- **TypeScript**: `^7.0.2`
+- **Vitest**: `^5.0.0`
 
-- **`Product`**: Food menu items (`id`, `name`, `description`, `price` in cents, `imageUrl`, `category`, `totalStock`, `availableStock`).
-- **`GroupSession`**: Shared group ordering sessions (`id`, `code` [6-character unique alphanumeric], `hostParticipantId`, `status` [`ACTIVE`, `ORDER_PLACED`, `ABANDONED`], `version`).
-- **`Participant`**: Users in a group session (`id`, `displayName`, `isHost`, `isReady`, `isOnline`, `joinedAt`, `lastActiveAt`).
-- **`CartItem`**: Collaborative line items in a group cart with explicit user attribution (`id`, `groupSession`, `product`, `participant`, `quantity`).
-- **`Order`**: Finalized order record (`id`, `orderType` [`NORMAL`, `GROUP`], `customerName`, `totalAmount`, `status`, `groupSession`).
-- **`OrderItem`**: Historical line items for orders preserving pricing and user attribution (`productName`, `price`, `quantity`, `addedByName`).
-
----
-
-## Prerequisites & Environment Setup
-
-### 1. Requirements
-- **Node.js**: v20.x or higher
-- **pnpm**: v9+ (or `npm`)
-- **Docker**: For running PostgreSQL locally
-
-### 2. Configure Environment Variables
-Copy the provided `.env.example` template to create your `.env` file:
+### 2. Environment Configuration
+Copy `.env.example` to create your local `.env` configuration file:
 
 ```bash
+# Linux/macOS
 cp .env.example .env
-```
-*(On Windows PowerShell: `Copy-Item .env.example .env`)*
 
-### 3. Start PostgreSQL with Docker
-Run the database container using the root `docker-compose.yml`:
+# Windows PowerShell
+Copy-Item .env.example .env
+```
+
+
+### 3. Database Container Setup (PostgreSQL 16)
+Start the PostgreSQL database container using Docker Compose:
+
 ```bash
 docker compose up -d
 ```
-Or start PostgreSQL manually:
+
+*Or launch via standalone Docker command:*
 ```bash
-docker run -d --name collab_food_order_postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=collab_food_order -p 5432:5432 postgres:16-alpine
+docker run -d \
+  --name collab_food_order_postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=collab_food_order \
+  -p 5432:5432 \
+  postgres:16-alpine
 ```
 
----
-
-## Installation, Migrations & Running
+### 4. Installation, Seeding & Development Server
 
 ```bash
-# 1. Install dependencies
+# Step 1: Install exact package dependencies
 pnpm install
 
-# 2. Run migrations and seed database
+# Step 2: Run migrations & seed catalog with 15 initial products
 pnpm db:seed
 
-# 3. Start development server with live reload
+# Step 3: Start development server with live reload (tsx watch)
 pnpm dev
-
-# 4. Production build & start
-pnpm build
 ```
 
-The HTTP API runs at `http://localhost:3000`.  
-The WebSocket server runs at `ws://localhost:3000/ws`.
+The HTTP REST API will listen at: `http://localhost:3000`  
+The WebSocket server will listen at: `ws://localhost:3000/ws`
 
----
+### 5. Running Automated Tests
 
-## REST API Reference
+Run the complete Vitest integration and concurrency test suite:
 
-### Health & Products
-- **`GET /health`**  
-  Checks server and database health status.
-- **`GET /api/products`**  
-  Returns all menu items ordered by category with real-time stock levels, `isOutOfStock`, and `isLowStock` flags.
-
-### Solo Orders
-- **`POST /api/orders/solo`**  
-  Places a standard solo order with atomic inventory deduction.  
-  **Request Body:**
-  ```json
-  {
-    "customerName": "Alice",
-    "items": [
-      { "productId": "uuid-here", "quantity": 2 }
-    ]
-  }
-  ```
-
-### Group Sessions
-- **`POST /api/groups`**  
-  Creates a new group session and designates the caller as Host. Returns session info and unique 6-character uppercase Join Code.  
-  **Request Body:**
-  ```json
-  { "hostDisplayName": "Sarah" }
-  ```
-- **`POST /api/groups/join`**  
-  Joins an active session using the Join Code.  
-  **Request Body:**
-  ```json
-  { "code": "ABC123", "displayName": "David" }
-  ```
-- **`GET /api/groups/:id`**  
-  Returns complete authoritative session state (session metadata, participants list with online/readiness states, attributed cart items, and live menu inventory).
-- **`GET /api/groups/code/:code`**  
-  Quick lookup to verify code validity before joining.
-- **`POST /api/groups/:id/ready`**  
-  Toggles participant readiness status (`isReady`).
-- **`POST /api/groups/:id/checkout`**  
-  Places the group order. Strictly restricted to the host; requires all participants to be ready.
-
----
-
-## WebSocket Real-Time Protocol (`/ws`)
-
-Connect to `ws://<host>:3000/ws`. All messages are JSON formatted.
-
-### Inbound Client Messages (Client to Server)
-| Message Type | Required Payload Fields | Description |
-| :--- | :--- | :--- |
-| `JOIN_SESSION` | `sessionId`, `participantId` | Associates socket with session, marks user online, sends full `SESSION_STATE`. |
-| `PING` | — | Heartbeat keepalive ping (server replies with `PONG`). |
-| `REQUEST_SYNC` | `sessionId` | Re-requests complete authoritative `SESSION_STATE` after reconnect. |
-| `CART_ADD` | `sessionId`, `participantId`, `productId`, `quantity` | Atomically locks stock and adds item attributed to participant. |
-| `CART_UPDATE` | `sessionId`, `participantId`, `cartItemId`, `quantity` | Modifies item quantity or removes if quantity is 0. |
-| `CART_REMOVE` | `sessionId`, `participantId`, `cartItemId` | Removes cart item and restores available stock. |
-| `TOGGLE_READY` | `sessionId`, `participantId` | Toggles readiness status ("Ready" vs "Still Browsing"). |
-| `PLACE_ORDER` | `sessionId`, `participantId` | Host places order (enforces `allReady` and non-empty cart). |
-
-### Outbound Broadcast Messages (Server to Client)
-| Event Type | Payload Data | Description |
-| :--- | :--- | :--- |
-| `SESSION_STATE` | `{ session, participants, cartItems, products }` | Complete state snapshot on connection or resync. |
-| `PARTICIPANT_STATUS_CHANGED` | `{ participantId, isOnline, isReady, allReady, participants }` | Broadcast when a user joins, disconnects, or toggles readiness. |
-| `CART_UPDATED` | `{ cartItems, totalCartAmount, version }` | Broadcast immediately when any participant modifies the cart. |
-| `INVENTORY_UPDATED` | `{ productId, availableStock, totalStock, isOutOfStock, isLowStock }` | Broadcast when product stock changes. |
-| `ORDER_PLACED` | `{ orderId, sessionId, hostDisplayName, totalAmount, items }` | Broadcast when host places order; prompts receipt modal. |
-| `ERROR` | `{ message }` | Emitted to a socket when an operation fails (e.g. `INSUFFICIENT_STOCK`). |
-
----
-
-## Automated Tests
-
-Run the test suite using Vitest:
 ```bash
 pnpm test
 ```
 
-### Test Suites:
-1. **`concurrency.test.ts`**:
-   - Tests simultaneous `cartService.addItem` race conditions on a product with only 1 unit remaining.
-   - Confirms that PostgreSQL pessimistic row locking allows exactly 1 caller to succeed while the other receives `INSUFFICIENT_STOCK`, keeping stock non-negative (`0`).
-   - Verifies item attribution tags on cart items.
-2. **`group-readiness-and-checkout.test.ts`**:
-   - Tests readiness status toggling and calculation of `allReady`.
-   - Tests that non-hosts cannot checkout (`403 HOST_ONLY_CHECKOUT`).
-   - Tests that host checkout is blocked when participants are not ready or the cart is empty.
-   - Verifies successful order placement, session completion (`ORDER_PLACED`), item attribution preservation, and total stock reduction.
-3. **`group-session.test.ts`**:
-   - Tests 6-character uppercase code generation, host assignment, and participant joining.
-4. **`products-and-solo-order.test.ts`**:
-   - Tests product listing, solo order placement, and atomic stock reduction.
+### 6. Production Build & Execution
+
+```bash
+# Compile TypeScript to dist/
+pnpm build
+
+# Start production Node server
+pnpm start
+```
+
+---
+
+## Packages Used & Architectural Rationale
+
+| Package | Version | Purpose & Selection Rationale |
+| :--- | :--- | :--- |
+| **`express`** | `^5.2.1` | **HTTP REST Routing Framework.** Lightweight, battle-tested HTTP server handling REST endpoints for health checks, product catalog queries, group session lifecycle, and solo orders. |
+| **`@mikro-orm/core`**<br>**`@mikro-orm/postgresql`**<br>**`@mikro-orm/migrations`** | `^7.2.0` | **Data Mapper ORM & Database Driver.** Chosen for strict Data Mapper pattern isolation, first-class pessimistic row-level locking (`LockMode.PESSIMISTIC_WRITE`), auto-migration generator, and clean entity decorator support. |
+| **`ws`** | `^8.21.3` | **Native WebSocket Engine.** Extremely lightweight, low-latency, high-throughput WebSocket library chosen over socket.io for minimal footprint, precise room subscription management, and direct control over binary/JSON protocol frames. |
+| **`zod`** | `^4.6.4` | **Runtime Schema Validation.** Guarantees runtime type safety and strict input validation for incoming HTTP request bodies and WebSocket JSON messages before executing domain logic. |
+| **`dotenv`** | `^17.4.2` | **Environment Configuration.** Loads environment variables from `.env` securely into `process.env`. |
+| **`cors`** | `^2.8.6` | **Cross-Origin Security.** Configures CORS headers to allow cross-origin requests from web browsers and Flutter mobile app clients. |
+| **`reflect-metadata`** | `^0.2.2` | **Metadata Reflection.** Required by MikroORM for entity decorator metadata reflection and type inference. |
+| **`vitest`** | `^5.0.0` | **Concurrent Test Runner.** Ultra-fast TypeScript test runner executing database race-condition concurrency tests and session lifecycle unit tests. |
+| **`tsx`** | `^4.23.13` | **TypeScript Execution.** Native tsx executor for running development servers and seed scripts instantly without build overhead. |
+| **`typescript`** | `^7.0.2` | **Static Typing System.** Ensures strict compile-time type safety across entities, repositories, WebSocket payloads, and DTOs. |
+
+---
+
+## Assumptions Made During Development
+
+1. **Host-Centric Session Lifecycle & Auto-Close**:
+   - The creator of a group session is designated as the **Host**.
+   - If the Host leaves or disconnects from the session, the group session status is automatically transitioned to `CLOSED`. Any reserved cart stock for that session is immediately unlocked and returned to catalog `availableStock` via PostgreSQL pessimistic locks.
+
+
+2. **No Authentication or Authorization**:
+   - We have not implemented Auth for this project. So the user's state while using the app is temporary and will be lost once he closes the app
+
+
+  
+---
+
+## Database Schema & Entities
+
+- **`Product`**: Menu items (`id`, `name`, `description`, `price` in cents, `imageUrl`, `category`, `totalStock`, `availableStock`).
+- **`GroupSession`**: Shared sessions (`id`, `code` [6-character unique uppercase code], `hostParticipantId`, `status` [`ACTIVE`, `CLOSED`, `ORDER_PLACED`], `version`).
+- **`Participant`**: Users in a session (`id`, `displayName`, `isHost`, `isReady`, `isOnline`, `joinedAt`).
+- **`CartItem`**: Shared cart line items with explicit user attribution (`id`, `groupSession`, `product`, `participant`, `quantity`).
+- **`Order`**: Completed order records (`id`, `orderType` [`NORMAL`, `GROUP`], `customerName`, `totalAmount`, `status`, `groupSession`).
+- **`OrderItem`**: Historical line items preserving pricing and user attribution (`productName`, `price`, `quantity`, `addedByName`).
+
+---
+
+## REST API Summary
+
+- **`GET /health`** - Server and database health check.
+- **`GET /api/products`** - Product catalog with live stock indicators (`availableStock`, `isOutOfStock`, `isLowStock`).
+- **`POST /api/orders/solo`** - Solo order placement with atomic stock deduction.
+- **`POST /api/groups`** - Create new group session & generate 6-character Join Code.
+- **`POST /api/groups/join`** - Join session via code.
+- **`GET /api/groups/:id`** - Get full session state snapshot.
+- **`POST /api/groups/:id/leave`** - Leave session (Host leaving auto-closes session & releases stock).
+- **`POST /api/groups/:id/ready`** - Toggle participant readiness.
+- **`POST /api/groups/:id/checkout`** - Host-only group order placement.
+
+---
+
+## WebSocket Real-Time Protocol (`ws://localhost:3000/ws`)
+
+| Event Type | Direction | Description |
+| :--- | :--- | :--- |
+| `JOIN_SESSION` | Client -> Server | Connects socket to session room & sends `SESSION_STATE`. |
+| `CART_ADD` | Client -> Server | Atomically locks stock and adds item attributed to user. |
+| `CART_UPDATE` | Client -> Server | Mutates item quantity or removes item if quantity is 0. |
+| `CART_REMOVE` | Client -> Server | Removes cart item & releases stock back to catalog. |
+| `TOGGLE_READY` | Client -> Server | Toggles user readiness ("Ready" vs "Still Browsing"). |
+| `LEAVE_SESSION` | Client -> Server | User exits session (Host exit triggers session closure). |
+| `PLACE_ORDER` | Client -> Server | Host places group order (requires `allReady: true`). |
+| `SESSION_STATE` | Server -> Broadcast | Full session snapshot on connect/resync. |
+| `CART_UPDATED` | Server -> Broadcast | Broadcasts updated cart & totals to all participants. |
+| `INVENTORY_UPDATED` | Server -> Broadcast | Broadcasts updated catalog stock levels. |
+| `PARTICIPANT_STATUS_CHANGED` | Server -> Broadcast | Broadcasts user joins, disconnects, or readiness toggles. |
+| `SESSION_CLOSED` | Server -> Broadcast | Broadcasts session closure when host leaves/disconnects. |
+| `ORDER_PLACED` | Server -> Broadcast | Broadcasts confirmed order summary to all participants. |
