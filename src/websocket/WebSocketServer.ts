@@ -297,6 +297,56 @@ export function setupWebSocketServer(httpServer: HttpServer): WSServer {
             break;
           }
 
+          case WsClientEvents.LEAVE_SESSION: {
+            const currentInfo = sessionManager.getClientInfo(ws);
+            const sessionId = message.sessionId || currentInfo?.sessionId;
+            const participantId = message.participantId || currentInfo?.participantId;
+
+            if (!sessionId || !participantId) {
+              sessionManager.sendTo(ws, {
+                type: WsServerEvents.ERROR,
+                message: 'Missing sessionId or participantId for LEAVE_SESSION',
+              });
+              return;
+            }
+
+            const leaveResult = await groupService.leaveGroup(sessionId, participantId);
+
+            if (leaveResult.sessionClosed) {
+              sessionManager.broadcast(sessionId, {
+                type: WsServerEvents.SESSION_CLOSED,
+                data: {
+                  sessionId,
+                  reason: `Host (${leaveResult.hostDisplayName}) has left the session. The group session is now closed.`,
+                  hostDisplayName: leaveResult.hostDisplayName,
+                },
+              });
+
+              if (leaveResult.restoredInventories) {
+                for (const inv of leaveResult.restoredInventories) {
+                  sessionManager.broadcast(sessionId, {
+                    type: WsServerEvents.INVENTORY_UPDATED,
+                    data: inv,
+                  });
+                }
+              }
+            } else {
+              try {
+                const state = await groupService.getSessionState(sessionId);
+                sessionManager.broadcast(sessionId, {
+                  type: WsServerEvents.PARTICIPANT_STATUS_CHANGED,
+                  data: {
+                    participantId,
+                    isOnline: false,
+                    participants: state.participants,
+                    allReady: state.session.allReady,
+                  },
+                });
+              } catch (_) {}
+            }
+            break;
+          }
+
           default: {
             console.log(`[WS] Unhandled message type: ${message.type}`);
             break;
@@ -316,21 +366,39 @@ export function setupWebSocketServer(httpServer: HttpServer): WSServer {
       if (info) {
         console.log(`[WS] Participant ${info.participantId} disconnected from session ${info.sessionId}`);
 
-        // Update DB presence: mark offline
-        await groupService.updateParticipantPresence(info.participantId, false);
-
-        // Fetch updated participants list and broadcast presence update
         try {
-          const state = await groupService.getSessionState(info.sessionId);
-          sessionManager.broadcast(info.sessionId, {
-            type: WsServerEvents.PARTICIPANT_STATUS_CHANGED,
-            data: {
-              participantId: info.participantId,
-              isOnline: false,
-              participants: state.participants,
-              allReady: state.session.allReady,
-            },
-          });
+          const leaveResult = await groupService.leaveGroup(info.sessionId, info.participantId);
+
+          if (leaveResult.sessionClosed) {
+            sessionManager.broadcast(info.sessionId, {
+              type: WsServerEvents.SESSION_CLOSED,
+              data: {
+                sessionId: info.sessionId,
+                reason: `Host (${leaveResult.hostDisplayName}) has left the session. The group session is now closed.`,
+                hostDisplayName: leaveResult.hostDisplayName,
+              },
+            });
+
+            if (leaveResult.restoredInventories) {
+              for (const inv of leaveResult.restoredInventories) {
+                sessionManager.broadcast(info.sessionId, {
+                  type: WsServerEvents.INVENTORY_UPDATED,
+                  data: inv,
+                });
+              }
+            }
+          } else {
+            const state = await groupService.getSessionState(info.sessionId);
+            sessionManager.broadcast(info.sessionId, {
+              type: WsServerEvents.PARTICIPANT_STATUS_CHANGED,
+              data: {
+                participantId: info.participantId,
+                isOnline: false,
+                participants: state.participants,
+                allReady: state.session.allReady,
+              },
+            });
+          }
         } catch (_) {
           // Session may have completed or been removed
         }

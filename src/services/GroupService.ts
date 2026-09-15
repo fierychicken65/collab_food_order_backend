@@ -1,3 +1,4 @@
+import { LockMode } from '@mikro-orm/core';
 import { getEntityManager } from '../db/db.js';
 import { GroupSession, GroupSessionStatus } from '../entities/GroupSession.js';
 import { Participant } from '../entities/Participant.js';
@@ -308,6 +309,87 @@ export class GroupService {
         isReady: participant.isReady,
         allReady,
         participants: participantsList,
+      };
+    });
+  }
+
+  /**
+   * Handles participant leaving a group session.
+   * If the host leaves/exits, the session status is updated to CLOSED and reserved cart stock is restored.
+   */
+  async leaveGroup(sessionId: string, participantId: string) {
+    const em = getEntityManager();
+
+    return await em.transactional(async (txEm) => {
+      const session = await txEm.findOne(
+        GroupSession,
+        { id: sessionId },
+        { populate: ['participants', 'cartItems', 'cartItems.product', 'cartItems.participant'] }
+      );
+
+      if (!session) {
+        throw new AppError('Group session not found', 404, 'SESSION_NOT_FOUND');
+      }
+
+      const participant = session.participants.getItems().find((p) => p.id === participantId);
+      if (!participant) {
+        throw new AppError('Participant not found in this session', 404, 'PARTICIPANT_NOT_FOUND');
+      }
+
+      participant.isOnline = false;
+
+      const isHost = participant.isHost || session.hostParticipantId === participant.id;
+
+      if (isHost && session.status === GroupSessionStatus.ACTIVE) {
+        session.status = GroupSessionStatus.CLOSED;
+
+        const restoredInventories: Array<{
+          productId: string;
+          availableStock: number;
+          totalStock: number;
+          isOutOfStock: boolean;
+          isLowStock: boolean;
+        }> = [];
+
+        for (const item of session.cartItems.getItems()) {
+          const product = await txEm.findOne(
+            Product,
+            { id: item.product.id },
+            { lockMode: LockMode.PESSIMISTIC_WRITE }
+          );
+          if (product) {
+            product.availableStock += item.quantity;
+            restoredInventories.push({
+              productId: product.id,
+              availableStock: product.availableStock,
+              totalStock: product.totalStock,
+              isOutOfStock: product.availableStock <= 0,
+              isLowStock: product.availableStock > 0 && product.availableStock <= 3,
+            });
+          }
+          txEm.remove(item);
+        }
+
+        session.version += 1;
+        await txEm.flush();
+
+        return {
+          sessionClosed: true,
+          isHost: true,
+          sessionId: session.id,
+          hostDisplayName: participant.displayName,
+          restoredInventories,
+        };
+      }
+
+      session.version += 1;
+      await txEm.flush();
+
+      return {
+        sessionClosed: false,
+        isHost: false,
+        sessionId: session.id,
+        participantId: participant.id,
       };
     });
   }

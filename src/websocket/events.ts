@@ -7,6 +7,7 @@ export const WsClientEvents = {
   CART_REMOVE: 'CART_REMOVE',
   TOGGLE_READY: 'TOGGLE_READY',
   PLACE_ORDER: 'PLACE_ORDER',
+  LEAVE_SESSION: 'LEAVE_SESSION',
 } as const;
 
 export const WsServerEvents = {
@@ -17,6 +18,7 @@ export const WsServerEvents = {
   CART_UPDATED: 'CART_UPDATED',
   INVENTORY_UPDATED: 'INVENTORY_UPDATED',
   ORDER_PLACED: 'ORDER_PLACED',
+  SESSION_CLOSED: 'SESSION_CLOSED',
   PONG: 'PONG',
   ERROR: 'ERROR',
 } as const;

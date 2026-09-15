@@ -151,3 +151,53 @@ groupRouter.post(
     }
   }
 );
+
+// POST /api/groups/:id/leave - Participant or host leaves session
+groupRouter.post(
+  '/:id/leave',
+  validateBody(z.object({ participantId: z.string().uuid() })),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const { participantId } = req.body;
+      const result = await groupService.leaveGroup(id, participantId);
+
+      if (result.sessionClosed) {
+        sessionManager.broadcast(id, {
+          type: WsServerEvents.SESSION_CLOSED,
+          data: {
+            sessionId: id,
+            reason: `Host (${result.hostDisplayName}) has left the session. The group session is now closed.`,
+            hostDisplayName: result.hostDisplayName,
+          },
+        });
+
+        if (result.restoredInventories) {
+          for (const inv of result.restoredInventories) {
+            sessionManager.broadcast(id, {
+              type: WsServerEvents.INVENTORY_UPDATED,
+              data: inv,
+            });
+          }
+        }
+      } else {
+        try {
+          const state = await groupService.getSessionState(id);
+          sessionManager.broadcast(id, {
+            type: WsServerEvents.PARTICIPANT_STATUS_CHANGED,
+            data: {
+              participantId,
+              isOnline: false,
+              participants: state.participants,
+              allReady: state.session.allReady,
+            },
+          });
+        } catch (_) {}
+      }
+
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);

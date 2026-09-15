@@ -2,7 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { initDb } from '../src/db/db.js';
 import { seed } from '../src/db/seed.js';
 import { groupService } from '../src/services/GroupService.js';
+import { cartService } from '../src/services/CartService.js';
 import { AppError } from '../middlewares/errorHandler.js';
+import { Product } from '../src/entities/Product.js';
 
 describe('Group Session Lifecycle (Create, Join, State)', () => {
   let orm: any;
@@ -58,5 +60,53 @@ describe('Group Session Lifecycle (Create, Join, State)', () => {
   it('should reject joining with invalid or non-existent code', async () => {
     await expect(groupService.joinGroup('SHORT', 'Guest')).rejects.toThrow(/must be 6 characters/);
     await expect(groupService.joinGroup('ZZZZZZ', 'Guest')).rejects.toThrow(/Active group session not found/);
+  });
+
+  it('should close the session and restore reserved stock when host leaves', async () => {
+    const hostResult = await groupService.createGroup('Host Emma');
+    const session = hostResult.session;
+    const host = hostResult.participant;
+
+    const joinResult = await groupService.joinGroup(session.code, 'Guest Frank');
+    const guest = joinResult.participant;
+
+    // Fetch initial product stock
+    const em = orm.em.fork();
+    const products = await em.find(Product, {}, { limit: 1 });
+    const product = products[0];
+    expect(product).toBeDefined();
+    const initialStock = product.availableStock;
+
+    // Add item to cart to reserve stock
+    await cartService.addItem(session.id, guest.id, product!.id, 2);
+
+    // Verify stock was decremented
+    const em2 = orm.em.fork();
+    const reservedProduct = await em2.findOne(Product, { id: product!.id });
+    expect(reservedProduct!.availableStock).toBe(initialStock - 2);
+
+    // Non-host leaves -> session stays active
+    const nonHostLeave = await groupService.leaveGroup(session.id, guest.id);
+    expect(nonHostLeave.sessionClosed).toBe(false);
+    expect(nonHostLeave.isHost).toBe(false);
+
+    // Host leaves -> session becomes CLOSED and stock is restored
+    const hostLeave = await groupService.leaveGroup(session.id, host.id);
+    expect(hostLeave.sessionClosed).toBe(true);
+    expect(hostLeave.isHost).toBe(true);
+
+    // Verify stock restored
+    const em3 = orm.em.fork();
+    const restoredProduct = await em3.findOne(Product, { id: product!.id });
+    expect(restoredProduct!.availableStock).toBe(initialStock);
+
+    // Verify session state reflects CLOSED status
+    const state = await groupService.getSessionState(session.id);
+    expect(state.session.status).toBe('CLOSED');
+
+    // Subsequent join attempts fail
+    await expect(groupService.joinGroup(session.code, 'Guest Grace')).rejects.toThrow(
+      /Active group session not found/
+    );
   });
 });

@@ -9,6 +9,7 @@ export enum GroupSessionStatus {
   ACTIVE = 'ACTIVE',
   ORDER_PLACED = 'ORDER_PLACED',
   ABANDONED = 'ABANDONED',
+  CLOSED = 'CLOSED',
 }
 
 @Entity()
