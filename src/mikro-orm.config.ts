@@ -13,12 +13,26 @@ import {
 
 dotenv.config();
 
+const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+const isRemoteDb =
+  hasDatabaseUrl &&
+  !process.env.DATABASE_URL?.includes('localhost') &&
+  !process.env.DATABASE_URL?.includes('127.0.0.1');
+const enableSsl = process.env.DB_SSL === 'true' || isRemoteDb;
+
 export default defineConfig({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgrespassword',
-  dbName: process.env.DB_NAME || 'collab_food_order',
+  ...(hasDatabaseUrl
+    ? { clientUrl: process.env.DATABASE_URL }
+    : {
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '5432', 10),
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || 'postgrespassword',
+        dbName: process.env.DB_NAME || 'collab_food_order',
+      }),
+  driverOptions: enableSsl
+    ? { connection: { ssl: { rejectUnauthorized: false } } }
+    : undefined,
   entities: [Product, GroupSession, Participant, CartItem, Order, OrderItem],
   metadataProvider: ReflectMetadataProvider,
   extensions: [Migrator],

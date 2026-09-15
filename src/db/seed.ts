@@ -127,7 +127,7 @@ export async function seed() {
   await orm.close();
 }
 
-if (process.argv[1] && process.argv[1].endsWith('seed.ts')) {
+if (process.argv[1] && (process.argv[1].endsWith('seed.ts') || process.argv[1].endsWith('seed.js'))) {
   seed()
     .then(() => {
       console.log('🚀 Seeding completed.');

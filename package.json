@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "db:seed": "tsx src/db/seed.ts",
+    "seed:prod": "node dist/db/seed.js",
     "test": "vitest run"
   },
   "keywords": [],
