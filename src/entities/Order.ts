@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { Entity, PrimaryKey, Property, ManyToOne, OneToMany } from '@mikro-orm/decorators/legacy';
-import { Collection } from '@mikro-orm/core';
+import { Collection, type Rel } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
 import { GroupSession } from './GroupSession.js';
 import { OrderItem } from './OrderItem.js';
@@ -23,7 +23,7 @@ export class Order {
   id: string = randomUUID();
 
   @ManyToOne(() => GroupSession, { nullable: true })
-  groupSession?: GroupSession;
+  groupSession?: Rel<GroupSession>;
 
   @Property({ type: 'varchar', length: 20, default: OrderType.GROUP })
   orderType: OrderType = OrderType.GROUP;

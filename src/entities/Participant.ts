@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { Entity, PrimaryKey, Property, ManyToOne, OneToMany } from '@mikro-orm/decorators/legacy';
-import { Collection } from '@mikro-orm/core';
+import { Collection, type Rel } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
 import { GroupSession } from './GroupSession.js';
 import { CartItem } from './CartItem.js';
@@ -11,7 +11,7 @@ export class Participant {
   id: string = randomUUID();
 
   @ManyToOne(() => GroupSession, { deleteRule: 'cascade' })
-  groupSession!: GroupSession;
+  groupSession!: Rel<GroupSession>;
 
   @Property({ type: 'varchar', length: 100 })
   displayName!: string;

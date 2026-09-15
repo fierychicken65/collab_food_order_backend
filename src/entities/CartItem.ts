@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { Entity, PrimaryKey, Property, ManyToOne, Unique } from '@mikro-orm/decorators/legacy';
+import type { Rel } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
 import { GroupSession } from './GroupSession.js';
 import { Product } from './Product.js';
@@ -12,13 +13,13 @@ export class CartItem {
   id: string = randomUUID();
 
   @ManyToOne(() => GroupSession, { deleteRule: 'cascade' })
-  groupSession!: GroupSession;
+  groupSession!: Rel<GroupSession>;
 
   @ManyToOne(() => Product)
   product!: Product;
 
   @ManyToOne(() => Participant, { deleteRule: 'cascade' })
-  participant!: Participant;
+  participant!: Rel<Participant>;
 
   @Property({ type: 'integer' })
   quantity: number = 1;

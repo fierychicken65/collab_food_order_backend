@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { Entity, PrimaryKey, Property, ManyToOne } from '@mikro-orm/decorators/legacy';
+import type { Rel } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
 import { Order } from './Order.js';
 import { Product } from './Product.js';
@@ -10,10 +11,10 @@ export class OrderItem {
   id: string = randomUUID();
 
   @ManyToOne(() => Order, { deleteRule: 'cascade' })
-  order!: Order;
+  order!: Rel<Order>;
 
   @ManyToOne(() => Product, { nullable: true })
-  product?: Product;
+  product?: Rel<Product>;
 
   @Property({ type: 'varchar', length: 255 })
   productName!: string;
