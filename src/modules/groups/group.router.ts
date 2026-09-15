@@ -2,6 +2,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { validateBody } from '../../middlewares/validate.js';
 import { groupService } from '../../services/GroupService.js';
+import { orderService } from '../../services/OrderService.js';
+import { sessionManager } from '../../websocket/SessionManager.js';
+import { WsServerEvents } from '../../websocket/events.js';
 import { getEntityManager } from '../../db/db.js';
 import { GroupSession, GroupSessionStatus } from '../../entities/GroupSession.js';
 import { AppError } from '../../middlewares/errorHandler.js';
@@ -99,3 +102,52 @@ groupRouter.get('/code/:code', async (req: Request, res: Response, next: NextFun
     next(error);
   }
 });
+
+// POST /api/groups/:id/ready - Toggle readiness status
+groupRouter.post(
+  '/:id/ready',
+  validateBody(z.object({ participantId: z.string().uuid() })),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const { participantId } = req.body;
+      const result = await groupService.toggleReady(id, participantId);
+
+      sessionManager.broadcast(id, {
+        type: WsServerEvents.PARTICIPANT_STATUS_CHANGED,
+        data: {
+          participantId: result.participantId,
+          isReady: result.isReady,
+          allReady: result.allReady,
+          participants: result.participants,
+        },
+      });
+
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /api/groups/:id/checkout - Host places group order
+groupRouter.post(
+  '/:id/checkout',
+  validateBody(z.object({ hostParticipantId: z.string().uuid() })),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const { hostParticipantId } = req.body;
+      const orderResult = await orderService.placeGroupOrder(id, hostParticipantId);
+
+      sessionManager.broadcast(id, {
+        type: WsServerEvents.ORDER_PLACED,
+        data: orderResult,
+      });
+
+      res.status(200).json(orderResult);
+    } catch (error) {
+      next(error);
+    }
+  }
+);

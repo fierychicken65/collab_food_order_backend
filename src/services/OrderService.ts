@@ -3,6 +3,7 @@ import { getEntityManager } from '../db/db.js';
 import { Product } from '../entities/Product.js';
 import { Order, OrderType, OrderStatus } from '../entities/Order.js';
 import { OrderItem } from '../entities/OrderItem.js';
+import { GroupSession, GroupSessionStatus } from '../entities/GroupSession.js';
 import { AppError } from '../middlewares/errorHandler.js';
 
 export interface SoloOrderItemInput {
@@ -100,6 +101,119 @@ export class OrderService {
           productName: oi.productName,
           price: oi.price,
           quantity: oi.quantity,
+          addedByName: oi.addedByName,
+        })),
+      };
+    });
+  }
+
+  /**
+   * Places a group order, strictly restricted to the host, and only when all participants are ready.
+   */
+  async placeGroupOrder(sessionId: string, hostParticipantId: string) {
+    const em = getEntityManager();
+
+    return await em.transactional(async (txEm) => {
+      const session = await txEm.findOne(
+        GroupSession,
+        { id: sessionId },
+        {
+          populate: [
+            'participants',
+            'cartItems',
+            'cartItems.product',
+            'cartItems.participant',
+          ],
+        }
+      );
+
+      if (!session) {
+        throw new AppError('Group session not found', 404, 'SESSION_NOT_FOUND');
+      }
+
+      if (session.status !== GroupSessionStatus.ACTIVE) {
+        throw new AppError('Group session is no longer active', 400, 'SESSION_INACTIVE');
+      }
+
+      // Host verification
+      const hostParticipant = session.participants.getItems().find((p) => p.id === hostParticipantId);
+      if (!hostParticipant || !hostParticipant.isHost) {
+        throw new AppError('Only the host can place the group order', 403, 'HOST_ONLY_CHECKOUT');
+      }
+
+      // Cart emptiness check
+      if (session.cartItems.length === 0) {
+        throw new AppError('Cannot place an order with an empty cart', 400, 'EMPTY_CART');
+      }
+
+      // All ready check
+      const participants = session.participants.getItems();
+      const allReady = participants.length > 0 && participants.every((p) => p.isReady);
+      if (!allReady) {
+        throw new AppError('All participants must be marked as Ready before checkout', 400, 'NOT_ALL_READY');
+      }
+
+      let totalAmount = 0;
+      const orderItems: OrderItem[] = [];
+
+      for (const ci of session.cartItems) {
+        const product = ci.product;
+        // Decrement totalStock (availableStock was already reserved when added to cart)
+        product.totalStock -= ci.quantity;
+
+        const lineTotal = product.price * ci.quantity;
+        totalAmount += lineTotal;
+
+        const orderItem = new OrderItem({
+          product,
+          productName: product.name,
+          price: product.price,
+          quantity: ci.quantity,
+          addedByName: ci.participant.displayName,
+        });
+
+        orderItems.push(orderItem);
+        txEm.remove(ci);
+      }
+
+      // Transition session status
+      session.status = GroupSessionStatus.ORDER_PLACED;
+      session.version += 1;
+
+      // Create permanent Order record
+      const order = new Order({
+        groupSession: session,
+        orderType: OrderType.GROUP,
+        customerName: `Group Order (${session.code}) - Host: ${hostParticipant.displayName}`,
+        totalAmount,
+        status: OrderStatus.CONFIRMED,
+      });
+
+      txEm.persist(order);
+
+      for (const oi of orderItems) {
+        oi.order = order;
+        txEm.persist(oi);
+      }
+
+      await txEm.flush();
+
+      return {
+        id: order.id,
+        orderId: order.id,
+        sessionId: session.id,
+        sessionCode: session.code,
+        hostDisplayName: hostParticipant.displayName,
+        totalAmount: order.totalAmount,
+        status: order.status,
+        createdAt: order.createdAt,
+        items: orderItems.map((oi) => ({
+          id: oi.id,
+          productId: oi.product?.id,
+          productName: oi.productName,
+          price: oi.price,
+          quantity: oi.quantity,
+          lineTotal: oi.price * oi.quantity,
           addedByName: oi.addedByName,
         })),
       };

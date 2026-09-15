@@ -258,6 +258,59 @@ export class GroupService {
       isOnline: participant.isOnline,
     };
   }
+
+  /**
+   * Toggles participant readiness status and computes session allReady.
+   */
+  async toggleReady(sessionId: string, participantId: string) {
+    const em = getEntityManager();
+
+    return await em.transactional(async (txEm) => {
+      const session = await txEm.findOne(
+        GroupSession,
+        { id: sessionId },
+        { populate: ['participants'] }
+      );
+
+      if (!session) {
+        throw new AppError('Group session not found', 404, 'SESSION_NOT_FOUND');
+      }
+
+      if (session.status !== GroupSessionStatus.ACTIVE) {
+        throw new AppError('Group session is no longer active', 400, 'SESSION_INACTIVE');
+      }
+
+      const participant = session.participants.getItems().find((p) => p.id === participantId);
+      if (!participant) {
+        throw new AppError('Participant not found in this session', 404, 'PARTICIPANT_NOT_FOUND');
+      }
+
+      participant.isReady = !participant.isReady;
+      session.version += 1;
+      await txEm.flush();
+
+      const participantsList = session.participants.getItems().map((p) => ({
+        id: p.id,
+        displayName: p.displayName,
+        isHost: p.isHost,
+        isReady: p.isReady,
+        isOnline: p.isOnline,
+        joinedAt: p.joinedAt,
+      }));
+
+      const allReady =
+        participantsList.length > 0 && participantsList.every((p) => p.isReady);
+
+      return {
+        sessionId: session.id,
+        version: session.version,
+        participantId: participant.id,
+        isReady: participant.isReady,
+        allReady,
+        participants: participantsList,
+      };
+    });
+  }
 }
 
 export const groupService = new GroupService();

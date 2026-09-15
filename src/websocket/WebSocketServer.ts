@@ -4,6 +4,7 @@ import { sessionManager } from './SessionManager.js';
 import { WsClientEvents, WsServerEvents, WsMessage } from './events.js';
 import { groupService } from '../services/GroupService.js';
 import { cartService } from '../services/CartService.js';
+import { orderService } from '../services/OrderService.js';
 
 export function setupWebSocketServer(httpServer: HttpServer): WSServer {
   const wss = new WSServer({
@@ -243,6 +244,55 @@ export function setupWebSocketServer(httpServer: HttpServer): WSServer {
             sessionManager.broadcast(sessionId, {
               type: WsServerEvents.INVENTORY_UPDATED,
               data: result.inventory,
+            });
+            break;
+          }
+
+          case WsClientEvents.TOGGLE_READY: {
+            const currentInfo = sessionManager.getClientInfo(ws);
+            const sessionId = message.sessionId || currentInfo?.sessionId;
+            const participantId = message.participantId || currentInfo?.participantId;
+
+            if (!sessionId || !participantId) {
+              sessionManager.sendTo(ws, {
+                type: WsServerEvents.ERROR,
+                message: 'Missing sessionId or participantId for TOGGLE_READY',
+              });
+              return;
+            }
+
+            const result = await groupService.toggleReady(sessionId, participantId);
+
+            sessionManager.broadcast(sessionId, {
+              type: WsServerEvents.PARTICIPANT_STATUS_CHANGED,
+              data: {
+                participantId: result.participantId,
+                isReady: result.isReady,
+                allReady: result.allReady,
+                participants: result.participants,
+              },
+            });
+            break;
+          }
+
+          case WsClientEvents.PLACE_ORDER: {
+            const currentInfo = sessionManager.getClientInfo(ws);
+            const sessionId = message.sessionId || currentInfo?.sessionId;
+            const participantId = message.participantId || currentInfo?.participantId;
+
+            if (!sessionId || !participantId) {
+              sessionManager.sendTo(ws, {
+                type: WsServerEvents.ERROR,
+                message: 'Missing sessionId or participantId for PLACE_ORDER',
+              });
+              return;
+            }
+
+            const orderResult = await orderService.placeGroupOrder(sessionId, participantId);
+
+            sessionManager.broadcast(sessionId, {
+              type: WsServerEvents.ORDER_PLACED,
+              data: orderResult,
             });
             break;
           }
